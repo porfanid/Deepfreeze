@@ -3,8 +3,20 @@
 from pathlib import Path
 import tempfile
 import shutil
+import os
+import stat
 
 from deepfreeze.domain import Domain, DomainType, ResetPolicy, DomainManager
+
+
+def remove_readonly(func, path, excinfo):
+    """Error handler for Windows readonly files.
+
+    This function is called when shutil.rmtree encounters a permission error.
+    It attempts to change the file permissions and retry the operation.
+    """
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 class TestDomain:
@@ -73,7 +85,7 @@ class TestDomainManager:
 
     def teardown_method(self):
         """Clean up test fixtures."""
-        shutil.rmtree(self.temp_dir)
+        shutil.rmtree(self.temp_dir, onerror=remove_readonly)
 
     def test_initialization(self):
         """Test domain manager initialization."""

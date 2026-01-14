@@ -24,6 +24,15 @@ Deep Freeze provides a powerful way to manage system state by separating storage
 - 🔒 **Predictable system behavior** with easy rollback
 - 🖥️ **Cross-platform support** (Linux, macOS, Windows)
 - 🚀 **Lightweight** - works on existing systems without OS changes
+- ⚡ **Performance optimized** - OverlayFS and hardlink-based snapshots
+- 🔁 **Auto-restore on boot** - optional system service
+
+### Performance Features (New!)
+
+- **OverlayFS Support (Linux):** Instant freeze/thaw with zero-copy snapshots
+- **Hardlink Snapshots:** Efficient storage using hardlinks instead of file copies
+- **Windows Junctions:** Fast redirection for Windows systems
+- **Minimal Disk Usage:** Multiple snapshots share unchanged files
 
 ## 📦 Installation
 
@@ -332,22 +341,37 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## 📋 Roadmap
 
-- [ ] Production-ready overlay filesystem integration (OverlayFS, unionfs)
+- [x] **Phase 1: Performance Optimization** (✅ COMPLETED)
+  - [x] OverlayFS integration for Linux
+  - [x] Windows junction/symlink simulation  
+  - [x] Hardlink-based efficient snapshots
 - [x] Boot-time integration for automatic snapshot restoration
 - [x] CLI restore command
+- [ ] **Phase 2: Security & Hardening**
+  - [ ] Password-protected CLI commands
+  - [ ] Config file encryption
+- [ ] **Phase 3: Advanced Boot Integration**
+  - [ ] Pre-login restoration (Linux)
+  - [ ] macOS LaunchDaemon support
+- [ ] **Phase 4: User Experience**
+  - [ ] Differential snapshots
+  - [ ] Background monitoring daemon
+  - [ ] Desktop notifications
+- [ ] **Phase 5: Deployment**
+  - [ ] Automated cross-platform installer
 - [ ] Web UI for management
 - [ ] Remote snapshot storage
-- [ ] Scheduled snapshots
-- [ ] Differential snapshots for efficiency
 - [ ] Network domain support
-- [ ] Enhanced security features
 
-## 🐛 Known Limitations (MVP)
+See [ROADMAP_STATUS.md](ROADMAP_STATUS.md) for detailed implementation status.
 
-- Snapshots use file copying (production should use more efficient methods)
-- Overlay filesystem is simulated (production needs actual overlay mounts)
-- Limited to user-space operations
-- Boot service requires manual installation (not automatic during package install)
+## 🐛 Known Limitations
+
+- OverlayFS requires root privileges (Linux only)
+- Windows junction approach less robust than kernel driver
+- Boot service requires manual installation
+- Limited to user-space operations (no kernel integration)
+- Config encryption not yet implemented
 
 ## 📄 License
 

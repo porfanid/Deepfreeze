@@ -170,3 +170,70 @@ class TestCLI:
 
         data = json.loads(result.output)
         assert data["initialized"] is True
+
+    def test_restore_command_with_default_flag(self):
+        """Test restore command with --default flag."""
+        # Initialize
+        self.runner.invoke(cli, ["--base-path", str(self.base_path), "init"])
+
+        # Create snapshot
+        self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "snapshot", "create", "test_snap"]
+        )
+
+        # Set as default
+        self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "set-default", "test_snap"]
+        )
+
+        # Restore
+        result = self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "restore", "--default"]
+        )
+
+        assert result.exit_code == 0
+        assert "restored successfully" in result.output.lower()
+
+    def test_restore_command_by_name(self):
+        """Test restore command by snapshot name."""
+        # Initialize
+        self.runner.invoke(cli, ["--base-path", str(self.base_path), "init"])
+
+        # Create snapshot
+        self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "snapshot", "create", "restore_by_name"]
+        )
+
+        # Restore by name
+        result = self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "restore", "restore_by_name"]
+        )
+
+        assert result.exit_code == 0
+        assert "restored successfully" in result.output.lower()
+
+    def test_restore_command_no_default(self):
+        """Test restore command without default snapshot set."""
+        # Initialize
+        self.runner.invoke(cli, ["--base-path", str(self.base_path), "init"])
+
+        # Try to restore without setting default
+        result = self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "restore", "--default"]
+        )
+
+        assert result.exit_code != 0
+        assert "no default snapshot" in result.output.lower()
+
+    def test_restore_command_missing_args(self):
+        """Test restore command without snapshot ID or --default flag."""
+        # Initialize
+        self.runner.invoke(cli, ["--base-path", str(self.base_path), "init"])
+
+        # Try to restore without arguments
+        result = self.runner.invoke(
+            cli, ["--base-path", str(self.base_path), "restore"]
+        )
+
+        assert result.exit_code != 0
+        assert "specify a snapshot" in result.output.lower()

@@ -6,10 +6,14 @@ This module provides the main interface for Deep Freeze operations.
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import platform
+import logging
 
 from .domain import DomainManager
 from .snapshot import SnapshotManager, Snapshot
 from .git_integration import GitManager
+from .filesystem import FilesystemManager
+
+logger = logging.getLogger(__name__)
 
 
 class DeepFreezeManager:
@@ -28,7 +32,9 @@ class DeepFreezeManager:
         self.domain_manager = DomainManager(self.base_path)
         self.snapshot_manager = SnapshotManager(self.base_path)
         self.git_managers: Dict[str, GitManager] = {}
+        self.filesystem = FilesystemManager()
         self.initialized = False
+        self.overlays: Dict[str, Dict[str, Path]] = {}  # Track mounted overlays
 
     def init(self) -> bool:
         """Initialize Deep Freeze system.
@@ -242,12 +248,153 @@ class DeepFreezeManager:
         """
         return (self.base_path / ".thawed").exists()
 
+    def restore_snapshot(
+        self, snapshot_id: Optional[str] = None, use_default: bool = False
+    ) -> bool:
+        """Restore a snapshot to the frozen domains.
+
+        Args:
+            snapshot_id: Snapshot ID to restore (optional if use_default=True)
+            use_default: If True, restore the default snapshot
+
+        Returns:
+            True if successful
+        """
+        if not self.initialized:
+            return False
+
+        # Determine which snapshot to restore
+        if use_default:
+            if not self.snapshot_manager.default_snapshot:
+                return False
+            snapshot_id = self.snapshot_manager.default_snapshot
+        elif not snapshot_id:
+            return False
+
+        # Unmount any existing overlays first
+        self.unmount_all_overlays()
+
+        # Get target paths for frozen domains
+        target_paths = {}
+        for domain in self.domain_manager.domains.values():
+            if domain.use_overlay:  # Frozen domains
+                target_paths[domain.name] = domain.path
+
+        # Restore the snapshot
+        return self.snapshot_manager.restore_snapshot(snapshot_id, target_paths)
+
+    def mount_overlay_for_domain(
+        self, domain_name: str, snapshot_id: str
+    ) -> bool:
+        """Mount an OverlayFS for a domain using a snapshot as base.
+
+        Args:
+            domain_name: Name of domain to mount
+            snapshot_id: Snapshot ID to use as lower layer
+
+        Returns:
+            True if successful
+        """
+        if not self.filesystem.supports_overlayfs():
+            logger.warning("OverlayFS not supported, using regular filesystem")
+            return False
+
+        domain = self.domain_manager.get_domain(domain_name)
+        if not domain or not domain.use_overlay:
+            return False
+
+        snapshot = self.snapshot_manager.get_snapshot(snapshot_id)
+        if not snapshot:
+            return False
+
+        # Setup overlay paths
+        lower_dir = (
+            self.snapshot_manager.snapshots_path / snapshot_id / domain_name
+        )
+        upper_dir = self.base_path / "overlays" / domain_name / "upper"
+        work_dir = self.base_path / "overlays" / domain_name / "work"
+        mount_point = domain.path
+
+        # Mount overlay
+        if self.filesystem.mount_overlay(
+            lower_dir, upper_dir, work_dir, mount_point
+        ):
+            self.overlays[domain_name] = {
+                "lower": lower_dir,
+                "upper": upper_dir,
+                "work": work_dir,
+                "mount": mount_point,
+            }
+            logger.info(f"Mounted overlay for domain: {domain_name}")
+            return True
+
+        return False
+
+    def unmount_overlay_for_domain(self, domain_name: str) -> bool:
+        """Unmount OverlayFS for a domain.
+
+        Args:
+            domain_name: Name of domain to unmount
+
+        Returns:
+            True if successful
+        """
+        if domain_name not in self.overlays:
+            return True
+
+        mount_point = self.overlays[domain_name]["mount"]
+        if self.filesystem.unmount_overlay(mount_point):
+            del self.overlays[domain_name]
+            logger.info(f"Unmounted overlay for domain: {domain_name}")
+            return True
+
+        return False
+
+    def unmount_all_overlays(self) -> bool:
+        """Unmount all OverlayFS mounts.
+
+        Returns:
+            True if all unmounted successfully
+        """
+        success = True
+        for domain_name in list(self.overlays.keys()):
+            if not self.unmount_overlay_for_domain(domain_name):
+                success = False
+
+        return success
+
+    def get_overlay_status(self) -> Dict[str, Any]:
+        """Get status of overlay mounts.
+
+        Returns:
+            Dictionary with overlay status information
+        """
+        status = {
+            "overlayfs_supported": self.filesystem.supports_overlayfs(),
+            "mounted_overlays": list(self.overlays.keys()),
+            "overlay_details": {},
+        }
+
+        for domain_name, paths in self.overlays.items():
+            status["overlay_details"][domain_name] = {
+                "lower": str(paths["lower"]),
+                "upper": str(paths["upper"]),
+                "work": str(paths["work"]),
+                "mount": str(paths["mount"]),
+                "is_mounted": self.filesystem.is_mount_point(paths["mount"]),
+            }
+
+        return status
+
     def close(self) -> None:
         """Close all Git managers and release file handles.
 
         This is important on Windows to avoid PermissionError when
         deleting directories.
         """
+        # Unmount any overlays before closing
+        self.unmount_all_overlays()
+
         for git_manager in self.git_managers.values():
             git_manager.close()
         self.git_managers.clear()

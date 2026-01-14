@@ -24,6 +24,15 @@ Deep Freeze provides a powerful way to manage system state by separating storage
 - 🔒 **Predictable system behavior** with easy rollback
 - 🖥️ **Cross-platform support** (Linux, macOS, Windows)
 - 🚀 **Lightweight** - works on existing systems without OS changes
+- ⚡ **Performance optimized** - OverlayFS and hardlink-based snapshots
+- 🔁 **Auto-restore on boot** - optional system service
+
+### Performance Features (New!)
+
+- **OverlayFS Support (Linux):** Instant freeze/thaw with zero-copy snapshots
+- **Hardlink Snapshots:** Efficient storage using hardlinks instead of file copies
+- **Windows Junctions:** Fast redirection for Windows systems
+- **Minimal Disk Usage:** Multiple snapshots share unchanged files
 
 ## 📦 Installation
 
@@ -153,6 +162,55 @@ freeze freeze
 
 Re-enables freezing after thawing.
 
+#### Restore Snapshot
+
+```bash
+# Restore the default snapshot
+freeze restore --default
+
+# Restore a specific snapshot by name or ID
+freeze restore base
+freeze restore 1babc5f463c1aea8
+```
+
+Restores a snapshot to the frozen domains (sys, cfg), returning the system to a known clean state.
+
+### Boot Service Management
+
+#### Install Auto-Restore Service
+
+```bash
+freeze service install
+```
+
+Installs a system service that automatically restores the default snapshot on every boot. This provides true "reboot-to-restore" functionality.
+
+**Requirements:**
+- Deep Freeze must be initialized
+- A default snapshot should be set (recommended)
+- Root/Administrator privileges required
+
+**Supported Platforms:**
+- Linux (systemd)
+- Windows (Task Scheduler)
+- macOS (manual installation - see services/README.md)
+
+#### Check Service Status
+
+```bash
+freeze service status
+```
+
+Shows the status of the auto-restore boot service.
+
+#### Uninstall Service
+
+```bash
+freeze service uninstall
+```
+
+Removes the auto-restore boot service from the system.
+
 ### Advanced Usage
 
 #### Custom Base Path
@@ -193,14 +251,19 @@ freeze set-default production-ready
 3. **Overlays**: Runtime changes go to overlays, discarded on reset
 4. **Git Control**: Configuration domain tracks changes in Git for auditability
 5. **Selective Persistence**: User data remains persistent across reboots
+6. **Auto-Restore**: Optional boot service automatically restores default snapshot
 
-### Data Flow
+Boot → [Auto-Restore Service] → Load Snapshot → Apply Overlays → Runtime Changes → Reboot
+                                       ↓
+                               Git Commit (optional, for cfg)
+```
 
-```
-Boot → Load Base Snapshot → Apply Overlays → Runtime Changes → Reboot → Reset to Snapshot
-                                    ↓
-                            Git Commit (optional, for cfg)
-```
+When the auto-restore service is installed:
+- System boots
+- Service runs `freeze restore --default`
+- Frozen domains (sys, cfg) are restored to snapshot state
+- User data in persistent domains remains unchanged
+- System is ready in clean state
 
 ## 🧪 Development
 
@@ -278,21 +341,37 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## 📋 Roadmap
 
-- [ ] Production-ready overlay filesystem integration (OverlayFS, unionfs)
-- [ ] Boot-time integration for automatic snapshot restoration
+- [x] **Phase 1: Performance Optimization** (✅ COMPLETED)
+  - [x] OverlayFS integration for Linux
+  - [x] Windows junction/symlink simulation  
+  - [x] Hardlink-based efficient snapshots
+- [x] Boot-time integration for automatic snapshot restoration
+- [x] CLI restore command
+- [ ] **Phase 2: Security & Hardening**
+  - [ ] Password-protected CLI commands
+  - [ ] Config file encryption
+- [ ] **Phase 3: Advanced Boot Integration**
+  - [ ] Pre-login restoration (Linux)
+  - [ ] macOS LaunchDaemon support
+- [ ] **Phase 4: User Experience**
+  - [ ] Differential snapshots
+  - [ ] Background monitoring daemon
+  - [ ] Desktop notifications
+- [ ] **Phase 5: Deployment**
+  - [ ] Automated cross-platform installer
 - [ ] Web UI for management
 - [ ] Remote snapshot storage
-- [ ] Scheduled snapshots
-- [ ] Differential snapshots for efficiency
 - [ ] Network domain support
-- [ ] Enhanced security features
 
-## 🐛 Known Limitations (MVP)
+See [ROADMAP_STATUS.md](ROADMAP_STATUS.md) for detailed implementation status.
 
-- Snapshots use file copying (production should use more efficient methods)
-- Boot integration is placeholder (requires system-level integration)
-- Overlay filesystem is simulated (production needs actual overlay mounts)
-- Limited to user-space operations
+## 🐛 Known Limitations
+
+- OverlayFS requires root privileges (Linux only)
+- Windows junction approach less robust than kernel driver
+- Boot service requires manual installation
+- Limited to user-space operations (no kernel integration)
+- Config encryption not yet implemented
 
 ## 📄 License
 

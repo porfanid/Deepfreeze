@@ -1,0 +1,20 @@
+[Unit]
+Description=Deep Freeze Auto-Restore Service
+Documentation=https://github.com/porfanid/Deepfreeze
+After=local-fs.target
+Before=network-pre.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/freeze restore --default
+RemainAfterExit=no
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening (optional)
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=sysinit.target

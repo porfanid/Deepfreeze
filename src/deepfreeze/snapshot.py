@@ -10,6 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import os
+import logging
+
+from .filesystem import FilesystemManager
+
+logger = logging.getLogger(__name__)
 
 
 class Snapshot:
@@ -75,11 +80,15 @@ class SnapshotManager:
         self.config_file = self.base_path / "snapshots.json"
         self.snapshots: Dict[str, Snapshot] = {}
         self.default_snapshot: Optional[str] = None
+        self.filesystem = FilesystemManager()
+        self.use_hardlinks = True  # Enable hardlink optimization
 
     def create_snapshot(
         self, name: str, domain_paths: Dict[str, Path], description: str = ""
     ) -> Snapshot:
         """Create a new snapshot of specified domains.
+
+        Uses hardlinks for efficient storage when possible.
 
         Args:
             name: Snapshot name
@@ -103,20 +112,36 @@ class SnapshotManager:
             if domain_path.exists():
                 # Create domain snapshot directory
                 domain_snapshot_dir = snapshot_dir / domain_name
-                domain_snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-                # Copy contents (for MVP, we copy files;
-                # production would use hardlinks, OverlayFS, or btrfs snapshots)
-                if domain_path.is_dir():
-                    for item in domain_path.iterdir():
-                        if item.is_file():
-                            shutil.copy2(item, domain_snapshot_dir / item.name)
-                        elif item.is_dir():
-                            shutil.copytree(
-                                item,
-                                domain_snapshot_dir / item.name,
-                                dirs_exist_ok=True,
-                            )
+                # Use hardlinks if enabled and on same filesystem
+                if (
+                    self.use_hardlinks
+                    and self.filesystem.is_same_filesystem(
+                        domain_path, snapshot_dir
+                    )
+                ):
+                    logger.info(
+                        f"Creating snapshot with hardlinks: {domain_name}"
+                    )
+                    self.filesystem.copy_with_hardlinks(
+                        domain_path, domain_snapshot_dir
+                    )
+                else:
+                    # Fall back to regular copy
+                    logger.info(f"Creating snapshot with copy: {domain_name}")
+                    domain_snapshot_dir.mkdir(parents=True, exist_ok=True)
+                    if domain_path.is_dir():
+                        for item in domain_path.iterdir():
+                            if item.is_file():
+                                shutil.copy2(
+                                    item, domain_snapshot_dir / item.name
+                                )
+                            elif item.is_dir():
+                                shutil.copytree(
+                                    item,
+                                    domain_snapshot_dir / item.name,
+                                    dirs_exist_ok=True,
+                                )
 
                 # Calculate hash
                 domain_hash = self._calculate_directory_hash(domain_path)

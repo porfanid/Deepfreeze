@@ -125,7 +125,9 @@ class DomainManager:
                 name=domain_type.value,
                 domain_type=domain_type,
                 path=domain_path,
-                **config,
+                reset_policy=config["reset_policy"],  # type: ignore[arg-type]
+                use_git=config["use_git"],  # type: ignore[arg-type]
+                use_overlay=config["use_overlay"],  # type: ignore[arg-type]
             )
             self.domains[domain_type.value] = domain
 

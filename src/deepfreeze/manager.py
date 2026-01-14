@@ -145,7 +145,7 @@ class DeepFreezeManager:
         Returns:
             Status information
         """
-        status = {
+        status: Dict[str, Any] = {
             "initialized": self.initialized,
             "base_path": str(self.base_path),
             "platform": platform.system(),
@@ -161,8 +161,9 @@ class DeepFreezeManager:
             return status
 
         # Domain status
+        domains_dict: Dict[str, Any] = {}
         for name, domain in self.domain_manager.domains.items():
-            status["domains"][name] = {
+            domains_dict[name] = {
                 "type": domain.domain_type.value,
                 "path": str(domain.path),
                 "reset_policy": domain.reset_policy.value,
@@ -170,14 +171,17 @@ class DeepFreezeManager:
                 "use_overlay": domain.use_overlay,
                 "exists": domain.path.exists(),
             }
+        status["domains"] = domains_dict
 
         # Git status for domains with Git
+        git_status_dict: Dict[str, Any] = {}
         for name, git_manager in self.git_managers.items():
-            status["git_status"][name] = git_manager.get_status()
+            git_status_dict[name] = git_manager.get_status()
+        status["git_status"] = git_status_dict
 
         # List recent snapshots
         snapshots = self.snapshot_manager.list_snapshots()
-        status["snapshots"]["recent"] = [
+        recent_snapshots: List[Dict[str, Any]] = [
             {
                 "id": s.snapshot_id,
                 "name": s.name,
@@ -186,6 +190,7 @@ class DeepFreezeManager:
             }
             for s in sorted(snapshots, key=lambda x: x.created_at, reverse=True)[:5]
         ]
+        status["snapshots"]["recent"] = recent_snapshots
 
         return status
 

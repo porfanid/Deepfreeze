@@ -106,7 +106,7 @@ class SnapshotManager:
                 domain_snapshot_dir.mkdir(parents=True, exist_ok=True)
 
                 # Copy contents (for MVP, we copy files;
-                # production would use more efficient methods)
+                # production would use hardlinks, OverlayFS, or btrfs snapshots)
                 if domain_path.is_dir():
                     for item in domain_path.iterdir():
                         if item.is_file():

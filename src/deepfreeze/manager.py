@@ -206,11 +206,12 @@ class DeepFreezeManager:
     def thaw(self) -> bool:
         """Temporarily disable freezing.
 
-        This is a placeholder for the MVP. In a full implementation,
-        this would modify boot configurations to disable overlay mounts.
-
         Returns:
             True if successful
+
+        Note:
+            MVP implementation uses a flag file. Production would modify
+            boot configurations to disable overlay mounts.
         """
         # For MVP, we just mark a flag file
         thaw_file = self.base_path / ".thawed"

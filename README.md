@@ -153,6 +153,55 @@ freeze freeze
 
 Re-enables freezing after thawing.
 
+#### Restore Snapshot
+
+```bash
+# Restore the default snapshot
+freeze restore --default
+
+# Restore a specific snapshot by name or ID
+freeze restore base
+freeze restore 1babc5f463c1aea8
+```
+
+Restores a snapshot to the frozen domains (sys, cfg), returning the system to a known clean state.
+
+### Boot Service Management
+
+#### Install Auto-Restore Service
+
+```bash
+freeze service install
+```
+
+Installs a system service that automatically restores the default snapshot on every boot. This provides true "reboot-to-restore" functionality.
+
+**Requirements:**
+- Deep Freeze must be initialized
+- A default snapshot should be set (recommended)
+- Root/Administrator privileges required
+
+**Supported Platforms:**
+- Linux (systemd)
+- Windows (Task Scheduler)
+- macOS (manual installation - see services/README.md)
+
+#### Check Service Status
+
+```bash
+freeze service status
+```
+
+Shows the status of the auto-restore boot service.
+
+#### Uninstall Service
+
+```bash
+freeze service uninstall
+```
+
+Removes the auto-restore boot service from the system.
+
 ### Advanced Usage
 
 #### Custom Base Path
@@ -193,14 +242,19 @@ freeze set-default production-ready
 3. **Overlays**: Runtime changes go to overlays, discarded on reset
 4. **Git Control**: Configuration domain tracks changes in Git for auditability
 5. **Selective Persistence**: User data remains persistent across reboots
+6. **Auto-Restore**: Optional boot service automatically restores default snapshot
 
-### Data Flow
+Boot → [Auto-Restore Service] → Load Snapshot → Apply Overlays → Runtime Changes → Reboot
+                                       ↓
+                               Git Commit (optional, for cfg)
+```
 
-```
-Boot → Load Base Snapshot → Apply Overlays → Runtime Changes → Reboot → Reset to Snapshot
-                                    ↓
-                            Git Commit (optional, for cfg)
-```
+When the auto-restore service is installed:
+- System boots
+- Service runs `freeze restore --default`
+- Frozen domains (sys, cfg) are restored to snapshot state
+- User data in persistent domains remains unchanged
+- System is ready in clean state
 
 ## 🧪 Development
 
@@ -279,7 +333,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 ## 📋 Roadmap
 
 - [ ] Production-ready overlay filesystem integration (OverlayFS, unionfs)
-- [ ] Boot-time integration for automatic snapshot restoration
+- [x] Boot-time integration for automatic snapshot restoration
+- [x] CLI restore command
 - [ ] Web UI for management
 - [ ] Remote snapshot storage
 - [ ] Scheduled snapshots
@@ -290,9 +345,9 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 ## 🐛 Known Limitations (MVP)
 
 - Snapshots use file copying (production should use more efficient methods)
-- Boot integration is placeholder (requires system-level integration)
 - Overlay filesystem is simulated (production needs actual overlay mounts)
 - Limited to user-space operations
+- Boot service requires manual installation (not automatic during package install)
 
 ## 📄 License
 

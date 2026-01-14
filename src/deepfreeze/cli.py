@@ -5,6 +5,9 @@ import click
 from pathlib import Path
 from typing import Optional
 import json
+import platform
+import subprocess
+import os
 
 from .manager import DeepFreezeManager
 
@@ -324,6 +327,307 @@ def freeze_cmd(ctx):
         click.echo("✓ System frozen - protection enabled")
     else:
         click.echo("✗ Failed to freeze system", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("snapshot_id", required=False)
+@click.option(
+    "--default",
+    "-d",
+    is_flag=True,
+    help="Restore the default snapshot",
+)
+@click.pass_context
+def restore(ctx, snapshot_id: Optional[str], default: bool):
+    """Restore a snapshot to frozen domains.
+
+    SNAPSHOT_ID is the snapshot identifier (or name). If not provided,
+    use --default to restore the default snapshot.
+    """
+    manager = DeepFreezeManager(ctx.obj["base_path"])
+
+    if not manager.is_initialized():
+        click.echo(
+            "✗ Deep Freeze is not initialized. Run 'freeze init' first.", err=True
+        )
+        sys.exit(1)
+
+    manager.load()
+
+    # Determine which snapshot to restore
+    if not snapshot_id and not default:
+        click.echo(
+            "✗ Please specify a snapshot ID or use --default flag", err=True
+        )
+        sys.exit(1)
+
+    if default:
+        if not manager.snapshot_manager.default_snapshot:
+            click.echo("✗ No default snapshot set", err=True)
+            sys.exit(1)
+
+        snapshot = manager.snapshot_manager.get_snapshot(
+            manager.snapshot_manager.default_snapshot
+        )
+        click.echo(f"Restoring default snapshot: {snapshot.name}...")
+        success = manager.restore_snapshot(use_default=True)
+    else:
+        # Try to find snapshot by ID or name
+        snapshot = manager.snapshot_manager.get_snapshot(snapshot_id)
+        if not snapshot:
+            snapshot = manager.snapshot_manager.get_snapshot_by_name(snapshot_id)
+
+        if not snapshot:
+            click.echo(f"✗ Snapshot not found: {snapshot_id}", err=True)
+            sys.exit(1)
+
+        click.echo(f"Restoring snapshot: {snapshot.name} ({snapshot.snapshot_id})...")
+        success = manager.restore_snapshot(snapshot.snapshot_id)
+
+    if success:
+        click.echo(f"✓ Snapshot restored successfully")
+        click.echo("\nRestored domains:")
+        for domain_name in snapshot.domains.keys():
+            click.echo(f"  • {domain_name}")
+    else:
+        click.echo("✗ Failed to restore snapshot", err=True)
+        sys.exit(1)
+
+
+@cli.group()
+def service():
+    """Manage auto-restore boot service."""
+    pass
+
+
+@service.command("install")
+@click.pass_context
+def service_install(ctx):
+    """Install auto-restore boot service.
+
+    This installs a system service that automatically restores
+    the default snapshot on every boot.
+    """
+    manager = DeepFreezeManager(ctx.obj["base_path"])
+
+    if not manager.is_initialized():
+        click.echo(
+            "✗ Deep Freeze is not initialized. Run 'freeze init' first.", err=True
+        )
+        sys.exit(1)
+
+    manager.load()
+
+    if not manager.snapshot_manager.default_snapshot:
+        click.echo("⚠ Warning: No default snapshot set", err=True)
+        click.echo("  The service will fail until you set a default snapshot.")
+        click.echo("  Run 'freeze set-default <snapshot-name>' to set one.")
+        click.echo()
+
+    # Determine service installation script based on platform
+    system = platform.system()
+    
+    # Find services directory (relative to this module)
+    module_dir = Path(__file__).parent.parent.parent
+    services_dir = module_dir / "services"
+    
+    if not services_dir.exists():
+        click.echo("✗ Services directory not found", err=True)
+        click.echo(f"  Expected location: {services_dir}", err=True)
+        sys.exit(1)
+
+    if system == "Linux":
+        install_script = services_dir / "install-linux.sh"
+        if not install_script.exists():
+            click.echo(f"✗ Installation script not found: {install_script}", err=True)
+            sys.exit(1)
+
+        click.echo("Installing systemd service...")
+        click.echo("Note: This requires root/sudo privileges.")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                ["sudo", str(install_script)],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            click.echo(result.stdout)
+        except subprocess.CalledProcessError as e:
+            click.echo("✗ Installation failed:", err=True)
+            click.echo(e.stderr, err=True)
+            sys.exit(1)
+        except FileNotFoundError:
+            click.echo("✗ 'sudo' command not found", err=True)
+            sys.exit(1)
+
+    elif system == "Windows":
+        install_script = services_dir / "install-windows.bat"
+        if not install_script.exists():
+            click.echo(f"✗ Installation script not found: {install_script}", err=True)
+            sys.exit(1)
+
+        click.echo("Installing Windows scheduled task...")
+        click.echo("Note: This requires Administrator privileges.")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                [str(install_script)],
+                shell=True,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            click.echo(result.stdout)
+        except subprocess.CalledProcessError as e:
+            click.echo("✗ Installation failed:", err=True)
+            click.echo(e.stderr, err=True)
+            sys.exit(1)
+
+    elif system == "Darwin":  # macOS
+        click.echo("macOS support is not yet automated.", err=True)
+        click.echo("Please refer to services/README.md for manual installation instructions.")
+        sys.exit(1)
+
+    else:
+        click.echo(f"✗ Unsupported platform: {system}", err=True)
+        sys.exit(1)
+
+
+@service.command("uninstall")
+@click.pass_context
+def service_uninstall(ctx):
+    """Uninstall auto-restore boot service."""
+    # Determine service uninstallation script based on platform
+    system = platform.system()
+    
+    # Find services directory
+    module_dir = Path(__file__).parent.parent.parent
+    services_dir = module_dir / "services"
+    
+    if not services_dir.exists():
+        click.echo("✗ Services directory not found", err=True)
+        sys.exit(1)
+
+    if system == "Linux":
+        uninstall_script = services_dir / "uninstall-linux.sh"
+        if not uninstall_script.exists():
+            click.echo(f"✗ Uninstallation script not found: {uninstall_script}", err=True)
+            sys.exit(1)
+
+        click.echo("Uninstalling systemd service...")
+        click.echo("Note: This requires root/sudo privileges.")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                ["sudo", str(uninstall_script)],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            click.echo(result.stdout)
+        except subprocess.CalledProcessError as e:
+            click.echo("✗ Uninstallation failed:", err=True)
+            click.echo(e.stderr, err=True)
+            sys.exit(1)
+
+    elif system == "Windows":
+        uninstall_script = services_dir / "uninstall-windows.bat"
+        if not uninstall_script.exists():
+            click.echo(f"✗ Uninstallation script not found: {uninstall_script}", err=True)
+            sys.exit(1)
+
+        click.echo("Uninstalling Windows scheduled task...")
+        click.echo("Note: This requires Administrator privileges.")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                [str(uninstall_script)],
+                shell=True,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            click.echo(result.stdout)
+        except subprocess.CalledProcessError as e:
+            click.echo("✗ Uninstallation failed:", err=True)
+            click.echo(e.stderr, err=True)
+            sys.exit(1)
+
+    elif system == "Darwin":  # macOS
+        click.echo("macOS support is not yet automated.", err=True)
+        click.echo("Please refer to services/README.md for manual uninstallation instructions.")
+        sys.exit(1)
+
+    else:
+        click.echo(f"✗ Unsupported platform: {system}", err=True)
+        sys.exit(1)
+
+
+@service.command("status")
+@click.pass_context
+def service_status(ctx):
+    """Check auto-restore boot service status."""
+    system = platform.system()
+
+    if system == "Linux":
+        click.echo("Checking systemd service status...")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                ["systemctl", "status", "deepfreeze-restore.service"],
+                capture_output=True,
+                text=True
+            )
+            click.echo(result.stdout)
+        except FileNotFoundError:
+            click.echo("✗ systemctl command not found", err=True)
+            sys.exit(1)
+
+    elif system == "Windows":
+        click.echo("Checking Windows scheduled task status...")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                ["schtasks", "/Query", "/TN", "DeepFreezeAutoRestore", "/V", "/FO", "LIST"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                click.echo(result.stdout)
+            else:
+                click.echo("Service is not installed")
+        except FileNotFoundError:
+            click.echo("✗ schtasks command not found", err=True)
+            sys.exit(1)
+
+    elif system == "Darwin":  # macOS
+        click.echo("Checking macOS launchd service status...")
+        click.echo()
+
+        try:
+            result = subprocess.run(
+                ["launchctl", "list", "com.deepfreeze.restore"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                click.echo(result.stdout)
+            else:
+                click.echo("Service is not installed")
+        except FileNotFoundError:
+            click.echo("✗ launchctl command not found", err=True)
+            sys.exit(1)
+
+    else:
+        click.echo(f"✗ Unsupported platform: {system}", err=True)
         sys.exit(1)
 
 

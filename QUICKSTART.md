@@ -160,6 +160,10 @@ freeze snapshot create <name>         # Create snapshot
 freeze snapshot list                  # List all snapshots
 freeze set-default <snapshot>         # Set default snapshot
 
+# Restore
+freeze restore --default              # Restore default snapshot
+freeze restore <snapshot>             # Restore specific snapshot
+
 # Status
 freeze status                         # Human-readable status
 freeze status --json-output           # JSON status
@@ -171,10 +175,40 @@ freeze commit "message"               # Commit cfg changes
 freeze thaw                           # Disable freezing
 freeze freeze                         # Enable freezing
 
+# Boot Service
+freeze service install                # Install auto-restore service
+freeze service status                 # Check service status
+freeze service uninstall              # Uninstall service
+
 # Help
 freeze --help                         # Main help
 freeze snapshot --help                # Snapshot help
 ```
+
+---
+
+## Enable Auto-Restore on Boot (Optional)
+
+For true "reboot-to-restore" functionality, install the boot service:
+
+```bash
+# Install the auto-restore service
+freeze service install
+
+# Check that it's installed correctly
+freeze service status
+```
+
+Now every time your system boots, it will automatically restore to the default snapshot!
+
+**Test it:**
+1. Make some changes to frozen domains
+2. Reboot your system
+3. Changes are gone - system is back to the clean state
+
+**Important:** Make sure you have a default snapshot set before installing the service.
+
+For more details, see `services/README.md`.
 
 ---
 

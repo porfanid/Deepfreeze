@@ -242,6 +242,38 @@ class DeepFreezeManager:
         """
         return (self.base_path / ".thawed").exists()
 
+    def restore_snapshot(
+        self, snapshot_id: Optional[str] = None, use_default: bool = False
+    ) -> bool:
+        """Restore a snapshot to the frozen domains.
+
+        Args:
+            snapshot_id: Snapshot ID to restore (optional if use_default=True)
+            use_default: If True, restore the default snapshot
+
+        Returns:
+            True if successful
+        """
+        if not self.initialized:
+            return False
+
+        # Determine which snapshot to restore
+        if use_default:
+            if not self.snapshot_manager.default_snapshot:
+                return False
+            snapshot_id = self.snapshot_manager.default_snapshot
+        elif not snapshot_id:
+            return False
+
+        # Get target paths for frozen domains
+        target_paths = {}
+        for domain in self.domain_manager.domains.values():
+            if domain.use_overlay:  # Frozen domains
+                target_paths[domain.name] = domain.path
+
+        # Restore the snapshot
+        return self.snapshot_manager.restore_snapshot(snapshot_id, target_paths)
+
     def close(self) -> None:
         """Close all Git managers and release file handles.
 

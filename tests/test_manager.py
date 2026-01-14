@@ -147,3 +147,55 @@ class TestDeepFreezeManager:
 
         assert self.manager.freeze()
         assert not self.manager.is_thawed()
+
+    def test_restore_snapshot(self):
+        """Test restoring a snapshot."""
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
+
+        # Create a snapshot
+        snapshot = self.manager.create_snapshot("restore_test", "Test restore")
+        self.manager.set_default_snapshot(snapshot.snapshot_id)
+
+        # Modify sys domain
+        sys_domain = self.manager.domain_manager.get_domain("sys")
+        test_file = sys_domain.path / "test_file.txt"
+        test_file.write_text("new content")
+
+        assert test_file.exists()
+
+        # Restore the snapshot
+        assert self.manager.restore_snapshot(snapshot.snapshot_id)
+
+        # Verify file was removed
+        assert not test_file.exists()
+
+    def test_restore_default_snapshot(self):
+        """Test restoring the default snapshot."""
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
+
+        # Create and set default snapshot
+        snapshot = self.manager.create_snapshot("default_restore", "Test default restore")
+        self.manager.set_default_snapshot(snapshot.snapshot_id)
+
+        # Modify sys domain
+        sys_domain = self.manager.domain_manager.get_domain("sys")
+        test_file = sys_domain.path / "default_test.txt"
+        test_file.write_text("content to remove")
+
+        assert test_file.exists()
+
+        # Restore using default
+        assert self.manager.restore_snapshot(use_default=True)
+
+        # Verify file was removed
+        assert not test_file.exists()
+
+    def test_restore_snapshot_not_found(self):
+        """Test restoring a non-existent snapshot."""
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
+
+        # Try to restore non-existent snapshot
+        assert not self.manager.restore_snapshot("nonexistent")

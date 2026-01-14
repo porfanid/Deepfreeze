@@ -31,6 +31,14 @@ class TestCLI:
 
     def teardown_method(self):
         """Clean up test fixtures."""
+        # Longer delay for CLI tests since managers are created internally
+        # and we can't close them directly
+        import time
+        import gc
+
+        # Force garbage collection to close file handles
+        gc.collect()
+        time.sleep(0.2)
         shutil.rmtree(self.temp_dir, onerror=remove_readonly)
 
     def test_init_command(self):

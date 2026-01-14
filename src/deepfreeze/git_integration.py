@@ -226,3 +226,16 @@ class GitManager:
             return True
         except GitCommandError:
             return False
+
+    def close(self) -> None:
+        """Close the Git repository and release file handles.
+
+        This is important on Windows to avoid PermissionError when
+        deleting the repository directory.
+        """
+        if self.repo is not None:
+            # Close git command handles
+            if hasattr(self.repo, "close"):
+                self.repo.close()
+            # Clear the reference
+            self.repo = None

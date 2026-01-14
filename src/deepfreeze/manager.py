@@ -236,3 +236,13 @@ class DeepFreezeManager:
             True if thawed
         """
         return (self.base_path / ".thawed").exists()
+
+    def close(self) -> None:
+        """Close all Git managers and release file handles.
+
+        This is important on Windows to avoid PermissionError when
+        deleting directories.
+        """
+        for git_manager in self.git_managers.values():
+            git_manager.close()
+        self.git_managers.clear()

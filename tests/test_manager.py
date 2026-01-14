@@ -26,51 +26,60 @@ class TestDeepFreezeManager:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.base_path = Path(self.temp_dir)
+        self.manager = None
 
     def teardown_method(self):
         """Clean up test fixtures."""
+        # Close Git managers to release file handles on Windows
+        if self.manager is not None and hasattr(self.manager, "close"):
+            self.manager.close()
+        # Small delay to ensure handles are released on Windows
+        import time
+
+        time.sleep(0.1)
         shutil.rmtree(self.temp_dir, onerror=remove_readonly)
 
     def test_initialization(self):
         """Test Deep Freeze initialization."""
-        manager = DeepFreezeManager(self.base_path)
+        self.manager = DeepFreezeManager(self.base_path)
 
-        assert manager.init()
-        assert manager.initialized
-        assert manager.base_path.exists()
-        assert (manager.base_path / "domains.json").exists()
+        assert self.manager.init()
+        assert self.manager.initialized
+        assert self.manager.base_path.exists()
+        assert (self.manager.base_path / "domains.json").exists()
 
     def test_is_initialized(self):
         """Test checking if Deep Freeze is initialized."""
-        manager = DeepFreezeManager(self.base_path)
+        self.manager = DeepFreezeManager(self.base_path)
 
-        assert not manager.is_initialized()
+        assert not self.manager.is_initialized()
 
-        manager.init()
+        self.manager.init()
 
-        assert manager.is_initialized()
+        assert self.manager.is_initialized()
 
     def test_load(self):
         """Test loading existing configuration."""
         # Initialize first
         manager1 = DeepFreezeManager(self.base_path)
         manager1.init()
+        manager1.close()
 
         # Create new manager and load
-        manager2 = DeepFreezeManager(self.base_path)
-        assert manager2.load()
-        assert manager2.initialized
+        self.manager = DeepFreezeManager(self.base_path)
+        assert self.manager.load()
+        assert self.manager.initialized
 
     def test_create_snapshot(self):
         """Test creating a snapshot."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
         # Create some test files in domains
-        sys_domain = manager.domain_manager.get_domain("sys")
+        sys_domain = self.manager.domain_manager.get_domain("sys")
         (sys_domain.path / "test.txt").write_text("test content")
 
-        snapshot = manager.create_snapshot("test_snapshot", "Test description")
+        snapshot = self.manager.create_snapshot("test_snapshot", "Test description")
 
         assert snapshot is not None
         assert snapshot.name == "test_snapshot"
@@ -78,14 +87,14 @@ class TestDeepFreezeManager:
 
     def test_list_snapshots(self):
         """Test listing snapshots."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
         # Create snapshots
-        manager.create_snapshot("snap1")
-        manager.create_snapshot("snap2")
+        self.manager.create_snapshot("snap1")
+        self.manager.create_snapshot("snap2")
 
-        snapshots = manager.list_snapshots()
+        snapshots = self.manager.list_snapshots()
 
         assert len(snapshots) == 2
         snapshot_names = [s.name for s in snapshots]
@@ -94,20 +103,20 @@ class TestDeepFreezeManager:
 
     def test_set_default_snapshot(self):
         """Test setting default snapshot."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
-        snapshot = manager.create_snapshot("default")
+        snapshot = self.manager.create_snapshot("default")
 
-        assert manager.set_default_snapshot(snapshot.snapshot_id)
-        assert manager.snapshot_manager.default_snapshot == snapshot.snapshot_id
+        assert self.manager.set_default_snapshot(snapshot.snapshot_id)
+        assert self.manager.snapshot_manager.default_snapshot == snapshot.snapshot_id
 
     def test_get_status(self):
         """Test getting Deep Freeze status."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
-        status = manager.get_status()
+        status = self.manager.get_status()
 
         assert status["initialized"] is True
         assert "base_path" in status
@@ -117,24 +126,24 @@ class TestDeepFreezeManager:
 
     def test_commit_config(self):
         """Test committing config changes."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
         # Create a file in cfg domain
-        cfg_domain = manager.domain_manager.get_domain("cfg")
+        cfg_domain = self.manager.domain_manager.get_domain("cfg")
         (cfg_domain.path / "config.txt").write_text("config content")
 
-        assert manager.commit_config("Test config commit")
+        assert self.manager.commit_config("Test config commit")
 
     def test_thaw_and_freeze(self):
         """Test thawing and freezing system."""
-        manager = DeepFreezeManager(self.base_path)
-        manager.init()
+        self.manager = DeepFreezeManager(self.base_path)
+        self.manager.init()
 
-        assert not manager.is_thawed()
+        assert not self.manager.is_thawed()
 
-        assert manager.thaw()
-        assert manager.is_thawed()
+        assert self.manager.thaw()
+        assert self.manager.is_thawed()
 
-        assert manager.freeze()
-        assert not manager.is_thawed()
+        assert self.manager.freeze()
+        assert not self.manager.is_thawed()
